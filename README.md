@@ -1,3 +1,4 @@
+# Sentiment Analysis
 We trained a sentiment classifier from tokenized sequences. Our dataloader pads each batch to a common length, the model turns token IDs into embeddings, and then predicts one of three classes. We monitor macro F1 so that each class counts equally, save the best model during training, print a full report with a confusion matrix, and export predictions for the public set.
 
 Our training setup aims for fast and stable learning. We use AdamW with OneCycleLR to speed convergence, dropout and gradient clipping to control overfitting and instability, and class weighting in CrossEntropyLoss together with a gentle WeightedRandomSampler to address skewed labels. Using macro F1 keeps the evaluation honest when classes are imbalanced.
