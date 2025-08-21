@@ -8,12 +8,12 @@ from torch.nn.utils.rnn import pad_sequence
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 
-# ------------------- Repro setup -------------------
+#Repro setup
 SEED = 42
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 
-# ------------------- Dataset & Collate -------------------
+#Dataset & Collate
 class SentimentDataset(Dataset):
     def __init__(self, seqs, labels=None):
         self.seqs   = seqs
@@ -35,7 +35,7 @@ def collate_fn(batch):
     padded = pad_sequence(seqs, batch_first=True, padding_value=0)
     return (padded, labels) if labels is not None else padded
 
-# ------------------- Model ---------------------------
+#Models 
 class TextCNN(nn.Module):
     """Larger TextCNN with more kernels for stronger class boundaries"""
     def __init__(self, vocab_size, emb_dim=128, num_filters=300,
@@ -98,11 +98,11 @@ def evaluate(model, loader, device):
     y_pred = torch.cat(preds).numpy(); y_true = torch.cat(trues).numpy()
     return accuracy_score(y_true, y_pred), f1_score(y_true, y_pred, average='macro')
 
-# ------------------- Main ----------------------------
+#Main
 
 def main():
-    # --------- Load data ---------
-    data_dir = os.path.expanduser('~/Desktop/vietnam-machine-learning-project/data')
+    #Load Data
+    data_dir = os.path.expanduser('~/Desktop/VietnamSentiment/data')
     X      = np.load(os.path.join(data_dir, 'train_X.npy'), allow_pickle=True)
     y      = np.load(os.path.join(data_dir, 'train_Y.npy'))
     X_pub  = np.load(os.path.join(data_dir, 'public_X.npy'), allow_pickle=True)
@@ -110,20 +110,20 @@ def main():
     X_tr, X_val, y_tr, y_val = train_test_split(X, y, test_size=0.1,
                                                 stratify=y, random_state=SEED)
 
-    # --------- Sampling & weights (focus on 0/2) ---------
+    #Sampling & weights (focus on 0/2)
     counts = np.bincount(y_tr)
     class_weights = counts.mean() / counts
     class_weights[1] = 1.0  # cap neutral
     sample_w = class_weights[y_tr] ** 0.05  # almost natural freq for stable 0/2 precision
     sampler   = WeightedRandomSampler(sample_w, len(sample_w), replacement=True)
 
-    # --------- DataLoaders ---------
+    #DataLoaders
     train_loader = DataLoader(SentimentDataset(X_tr, y_tr), batch_size=64,
                               sampler=sampler, collate_fn=collate_fn, num_workers=2)
     val_loader   = DataLoader(SentimentDataset(X_val, y_val), batch_size=64,
                               shuffle=False, collate_fn=collate_fn, num_workers=2)
 
-    # --------- Model & Optim ---------
+    #Model & Optim
     vocab_size = int(max(max(np.concatenate([X_tr, X_val, X_pub]))) + 1)
     device     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model      = TextCNN(vocab_size).to(device)
@@ -136,7 +136,7 @@ def main():
     crit_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
     criterion    = nn.CrossEntropyLoss(weight=crit_weights)
 
-    # --------- Training loop ---------
+    #Training loop
     best_f1, no_imp, patience = 0.0, 0, 6
     for epoch in range(1, 26):
         tr_loss = train_epoch(model, train_loader, optimizer, criterion, scheduler, device)
@@ -145,20 +145,15 @@ def main():
         if val_f1 > best_f1:
             best_f1, no_imp = val_f1, 0
             torch.save(model.state_dict(), 'best_model.pt')
-            print(f"    ↳ new best saved (F1={best_f1:.4f})")
-        else:
-            no_imp += 1
-            if no_imp >= patience:
-                print("Early stopping triggered.")
-                break
+            print(f"    ↳ best (F1={best_f1:.4f})")
 
-    # --------- Final evaluation ---------
+    #Final evaluation
     model.load_state_dict(torch.load('best_model.pt'))
     val_acc, val_f1 = evaluate(model, val_loader, device)
     print(f"Best ValAcc = {val_acc:.4f}  |  Best ValF1 = {val_f1:.4f}")
 
     y_true, y_pred = [], []
-    model.eval();
+    model.eval()
     with torch.no_grad():
         for X, y in val_loader:
             y_true.append(y); y_pred.append(model(X.to(device)).argmax(1).cpu())
@@ -166,7 +161,7 @@ def main():
     print(classification_report(y_true, y_pred, digits=4))
     print(confusion_matrix(y_true, y_pred))
 
-    # --------- Public predictions ---------
+    #Public predictions
     pub_loader = DataLoader(SentimentDataset(X_pub), batch_size=64,
                             shuffle=False, collate_fn=collate_fn, num_workers=2)
     preds = []
